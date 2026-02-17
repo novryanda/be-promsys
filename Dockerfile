@@ -21,8 +21,13 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+
+# Copy node_modules and source
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Copy .env for Prisma generate
+COPY .env .env
 
 # Generate Prisma client
 RUN npx prisma generate
