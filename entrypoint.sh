@@ -11,7 +11,11 @@ export DATABASE_URL
 if [ "$DB_MIGRATE" = "true" ]; then
   echo ">> Running prisma migrate deploy..."
   echo ">> Running prisma migrate deploy with DATABASE_URL=$DATABASE_URL"
-  npx prisma migrate deploy --schema=prisma/schema.prisma
+  echo ">> Listing prisma.config.ts:"
+  ls -l prisma.config.ts
+  echo ">> Contents of prisma.config.ts:"
+  cat prisma.config.ts
+  npx prisma migrate deploy --config=prisma.config.ts
   echo ">> Migration completed."
 fi
 
