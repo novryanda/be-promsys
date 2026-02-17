@@ -1,0 +1,444 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  SUBMITTED
+  REVISION
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum InvoiceType {
+  INCOME
+  EXPENSE
+}
+
+enum InvoiceStatus {
+  PAID
+  UNPAID
+  DEBT
+}
+
+enum ReimbursementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum DocumentType {
+  PROPOSAL
+  TUTORIAL
+  CONTRACT
+  REPORT
+  MINUTES
+  OTHER
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_SUBMITTED
+  TASK_APPROVED
+  TASK_REVISION
+  INVOICE_CREATED
+  REIMBURSEMENT_SUBMITTED
+  REIMBURSEMENT_APPROVED
+  REIMBURSEMENT_REJECTED
+  PROJECT_ASSIGNED
+}
+
+// ─── Auth Domain (Better Auth) ──────────────────────────
+
+model user {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          String    @default("EMPLOYEES")
+  banned        Boolean?
+  banReason     String?
+  banExpires    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      session[]
+  accounts      account[]
+
+  // Business relations
+  teamMembers             teamMember[]
+  projectMembers          projectMember[]
+  createdProjects         project[]              @relation("ProjectCreatedBy")
+  assignedTasks           task[]                 @relation("TaskAssignedTo")
+  createdTasks            task[]                 @relation("TaskCreatedBy")
+  taskAttachments         taskAttachment[]
+  taskComments            taskComment[]
+  createdInvoices         invoice[]
+  submittedReimbursements reimbursement[]        @relation("ReimbursementSubmittedBy")
+  approvedReimbursements  reimbursement[]        @relation("ReimbursementApprovedBy")
+  notifications           notification[]
+  uploadedFiles           file[]
+  projectDocuments        projectDocument[]
+  projectActivities       projectActivity[]
+}
+
+model session {
+  id                   String   @id @default(cuid())
+  userId               String
+  token                String   @unique
+  expiresAt            DateTime
+  ipAddress            String?
+  userAgent            String?
+  impersonatedBy       String?
+  activeOrganizationId String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  user      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ─── Settings Domain ────────────────────────────────────
+
+model category {
+  id        String       @id @default(cuid())
+  name      String
+  type      CategoryType
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  vendors        vendor[]
+  invoices       invoice[]
+  reimbursements reimbursement[]
+}
+
+model tax {
+  id         String   @id @default(cuid())
+  name       String
+  percentage Decimal
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  invoices invoice[]
+}
+
+// ─── Vendor Domain ──────────────────────────────────────
+
+model vendor {
+  id            String   @id @default(cuid())
+  name          String
+  location      String
+  contactPerson String?
+  phone         String?
+  email         String?
+  categoryId    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  category category  @relation(fields: [categoryId], references: [id])
+  invoices invoice[]
+}
+
+// ─── Project Domain ─────────────────────────────────────
+
+model team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members teamMember[]
+}
+
+model teamMember {
+  id       String   @id @default(cuid())
+  teamId   String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  team team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+model project {
+  id            String        @id @default(cuid())
+  name          String
+  clientName    String?
+  ptName        String?
+  description   String?
+  startDate     DateTime?
+  endDate       DateTime?
+  contractValue Decimal?
+  status        ProjectStatus @default(PLANNING)
+  createdById   String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  createdBy      user              @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  members        projectMember[]
+  tasks          task[]
+  invoices       invoice[]
+  reimbursements reimbursement[]
+  documents      projectDocument[]
+  activities     projectActivity[]
+}
+
+model projectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  role      String   @default("member")
+  joinedAt  DateTime @default(now())
+
+  project project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    user    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
+// ─── Project Document Domain ────────────────────────────
+
+model projectDocument {
+  id           String       @id @default(cuid())
+  projectId    String
+  name         String
+  type         DocumentType
+  fileName     String
+  fileUrl      String
+  fileSize     Int
+  mimeType     String?
+  uploadedById String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  project    project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy user    @relation(fields: [uploadedById], references: [id])
+}
+
+// ─── Project Activity Domain ────────────────────────────
+
+model projectActivity {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  activityDate DateTime @default(now())
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project   project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy user    @relation(fields: [createdById], references: [id])
+}
+
+// ─── Task Domain ────────────────────────────────────────
+
+model task {
+  id           String       @id @default(cuid())
+  projectId    String
+  title        String
+  description  String?
+  assignedToId String
+  deadline     DateTime
+  priority     TaskPriority @default(MEDIUM)
+  status       TaskStatus   @default(TODO)
+  createdById  String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  project     project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedTo  user             @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  createdBy   user             @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  attachments taskAttachment[]
+  comments    taskComment[]
+}
+
+model taskAttachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  fileName     String
+  fileUrl      String
+  fileSize     Int
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  task       task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy user @relation(fields: [uploadedById], references: [id])
+}
+
+model taskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  task task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user user @relation(fields: [userId], references: [id])
+}
+
+// ─── Invoice Domain ─────────────────────────────────────
+
+model invoice {
+  id            String        @id @default(cuid())
+  invoiceNumber String        @unique
+  type          InvoiceType
+  projectId     String?
+  vendorId      String?
+  categoryId    String
+  taxId         String?
+  amount        Decimal
+  taxAmount     Decimal       @default(0)
+  totalAmount   Decimal
+  status        InvoiceStatus @default(UNPAID)
+  dueDate       DateTime?
+  paidAt        DateTime?
+  notes         String?
+  createdById   String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  project     project?            @relation(fields: [projectId], references: [id])
+  vendor      vendor?             @relation(fields: [vendorId], references: [id])
+  category    category            @relation(fields: [categoryId], references: [id])
+  tax         tax?                @relation(fields: [taxId], references: [id])
+  createdBy   user                @relation(fields: [createdById], references: [id])
+  attachments invoiceAttachment[]
+}
+
+model invoiceAttachment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  createdAt DateTime @default(now())
+
+  invoice invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// ─── Reimbursement Domain ───────────────────────────────
+
+model reimbursement {
+  id              String              @id @default(cuid())
+  title           String
+  description     String?
+  amount          Decimal
+  categoryId      String
+  projectId       String?
+  submittedById   String
+  approvedById    String?
+  status          ReimbursementStatus @default(PENDING)
+  rejectionReason String?
+  submittedAt     DateTime            @default(now())
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  category    category                  @relation(fields: [categoryId], references: [id])
+  project     project?                  @relation(fields: [projectId], references: [id])
+  submittedBy user                      @relation("ReimbursementSubmittedBy", fields: [submittedById], references: [id])
+  approvedBy  user?                     @relation("ReimbursementApprovedBy", fields: [approvedById], references: [id])
+  attachments reimbursementAttachment[]
+}
+
+model reimbursementAttachment {
+  id              String   @id @default(cuid())
+  reimbursementId String
+  fileName        String
+  fileUrl         String
+  fileSize        Int
+  createdAt       DateTime @default(now())
+
+  reimbursement reimbursement @relation(fields: [reimbursementId], references: [id], onDelete: Cascade)
+}
+
+// ─── Notification Domain ────────────────────────────────
+
+model notification {
+  id            String           @id @default(cuid())
+  userId        String
+  type          NotificationType
+  title         String
+  message       String
+  referenceId   String?
+  referenceType String?
+  isRead        Boolean          @default(false)
+  emailSent     Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+
+  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── File Domain ────────────────────────────────────────
+
+model file {
+  id           String   @id @default(cuid())
+  fileName     String
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  bucket       String
+  key          String
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  uploadedBy user @relation(fields: [uploadedById], references: [id])
+}

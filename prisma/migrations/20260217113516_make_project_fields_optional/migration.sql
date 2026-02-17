@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "project" ALTER COLUMN "clientName" DROP NOT NULL,
+ALTER COLUMN "startDate" DROP NOT NULL,
+ALTER COLUMN "endDate" DROP NOT NULL,
+ALTER COLUMN "contractValue" DROP NOT NULL;
