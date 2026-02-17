@@ -11,7 +11,7 @@ export DATABASE_URL
 if [ "$DB_RESET" = "true" ]; then
   echo ">> [DANGER] Running prisma migrate reset --force..."
   # --skip-seed because we want to control seeding via DB_SEED
-  npx prisma migrate reset --force --skip-seed
+  npx prisma migrate reset --force
   echo ">> Reset completed."
 fi
 
