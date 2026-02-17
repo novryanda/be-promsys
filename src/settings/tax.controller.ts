@@ -11,14 +11,8 @@ import {
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '../auth/roles.enum';
 import { TaxService } from './tax.service';
-import {
-  CreateTaxSchema,
-  UpdateTaxSchema,
-} from './dto/tax.dto';
-import type {
-  CreateTaxDto,
-  UpdateTaxDto,
-} from './dto/tax.dto';
+import { CreateTaxSchema, UpdateTaxSchema } from './dto/tax.dto';
+import type { CreateTaxDto, UpdateTaxDto } from './dto/tax.dto';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 
 @Controller('api/taxes')

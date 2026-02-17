@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Query } from '@nestjs/common';
 import { CurrentUser } from '../auth/auth.decorator';
 import { NotificationService } from './notification.service';
 
@@ -7,15 +7,19 @@ export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 
   @Get()
-  findAll(@CurrentUser('id') userId: string) {
-    return this.notificationService.findAllByUser(userId);
+  findAll(
+    @CurrentUser('id') userId: string,
+    @Query('page') page: number = 1,
+    @Query('size') size: number = 20,
+  ) {
+    return this.notificationService.findAllByUser(userId, {
+      page: Number(page),
+      size: Number(size),
+    });
   }
 
   @Patch(':id/read')
-  markAsRead(
-    @Param('id') id: string,
-    @CurrentUser('id') userId: string,
-  ) {
+  markAsRead(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.notificationService.markAsRead(id, userId);
   }
 

@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UsePipes,
   UseInterceptors,
   UploadedFile,
@@ -50,8 +51,13 @@ export class InvoiceController {
   findAll(
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
+    @Query('page') page: number = 1,
+    @Query('size') size: number = 10,
   ) {
-    return this.invoiceService.findAll(userId, role);
+    return this.invoiceService.findAll(userId, role, {
+      page: Number(page),
+      size: Number(size),
+    });
   }
 
   @Get(':id')

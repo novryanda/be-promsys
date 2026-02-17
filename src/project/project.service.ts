@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto/project.dto';
@@ -24,12 +25,15 @@ function stripUndefined<T extends Record<string, any>>(obj: T): T {
 
 @Injectable()
 export class ProjectService {
+  private readonly logger = new Logger(ProjectService.name);
   constructor(private prisma: PrismaService) {}
 
   async create(data: CreateProjectDto, createdById: string) {
     try {
-      console.log('[ProjectService.create] data:', JSON.stringify(data));
-      console.log('[ProjectService.create] createdById:', createdById);
+      this.logger.debug(
+        `[ProjectService.create] data: ${JSON.stringify(data)}`,
+      );
+      this.logger.debug(`[ProjectService.create] createdById: ${createdById}`);
       const result = await this.prisma.project.create({
         data: { ...stripUndefined(data), createdById },
         include: {
@@ -38,29 +42,53 @@ export class ProjectService {
           _count: { select: { tasks: true, invoices: true } },
         },
       });
-      console.log('[ProjectService.create] success:', result.id);
+      this.logger.log(`[ProjectService.create] success: ${result.id}`);
       return result;
     } catch (error) {
-      console.error('[ProjectService.create] ERROR:', error);
+      this.logger.error(
+        `[ProjectService.create] ERROR: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
 
-  async findAll(userId: string, userRole: string) {
+  async findAll(
+    userId: string,
+    userRole: string,
+    params: { page: number; size: number },
+  ) {
+    const { page, size } = params;
+    const skip = (page - 1) * size;
+
     const where =
       userRole === Role.EMPLOYEES
         ? { members: { some: { userId } } }
         : undefined;
 
-    return this.prisma.project.findMany({
-      where,
-      include: {
-        createdBy: true,
-        members: { include: { user: true } },
-        _count: { select: { tasks: true, invoices: true, members: true } },
+    const [projects, total] = await Promise.all([
+      this.prisma.project.findMany({
+        where,
+        include: {
+          createdBy: true,
+          members: { include: { user: true } },
+          _count: { select: { tasks: true, invoices: true, members: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: size,
+      }),
+      this.prisma.project.count({ where }),
+    ]);
+
+    return {
+      data: projects,
+      paging: {
+        current_page: page,
+        size: size,
+        total_page: Math.ceil(total / size),
       },
-      orderBy: { createdAt: 'desc' },
-    });
+    };
   }
 
   async findOne(id: string, userId: string, userRole: string) {
@@ -105,20 +133,22 @@ export class ProjectService {
   }
 
   async addMember(projectId: string, userId: string, role: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-    });
-    if (!project) throw new NotFoundException('Project not found');
+    return this.prisma.$transaction(async (tx) => {
+      const project = await tx.project.findUnique({
+        where: { id: projectId },
+      });
+      if (!project) throw new NotFoundException('Project not found');
 
-    const existing = await this.prisma.projectMember.findUnique({
-      where: { projectId_userId: { projectId, userId } },
-    });
-    if (existing)
-      throw new ConflictException('User is already a project member');
+      const existing = await tx.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId } },
+      });
+      if (existing)
+        throw new ConflictException('User is already a project member');
 
-    return this.prisma.projectMember.create({
-      data: { projectId, userId, role },
-      include: { user: true },
+      return tx.projectMember.create({
+        data: { projectId, userId, role },
+        include: { user: true },
+      });
     });
   }
 
@@ -192,7 +222,11 @@ export class ProjectService {
         mimeType: file.mimetype,
         uploadedById,
       },
-      include: { uploadedBy: { select: { id: true, name: true, email: true, image: true } } },
+      include: {
+        uploadedBy: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
     });
   }
 
@@ -224,7 +258,11 @@ export class ProjectService {
         mimeType: file.mimetype,
         uploadedById,
       },
-      include: { uploadedBy: { select: { id: true, name: true, email: true, image: true } } },
+      include: {
+        uploadedBy: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
     });
   }
 
@@ -236,7 +274,11 @@ export class ProjectService {
 
     return this.prisma.projectDocument.findMany({
       where: { projectId },
-      include: { uploadedBy: { select: { id: true, name: true, email: true, image: true } } },
+      include: {
+        uploadedBy: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -244,7 +286,11 @@ export class ProjectService {
   async findOneDocument(projectId: string, documentId: string) {
     const doc = await this.prisma.projectDocument.findFirst({
       where: { id: documentId, projectId },
-      include: { uploadedBy: { select: { id: true, name: true, email: true, image: true } } },
+      include: {
+        uploadedBy: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
     });
     if (!doc) throw new NotFoundException('Document not found');
     return doc;
@@ -263,7 +309,11 @@ export class ProjectService {
     return this.prisma.projectDocument.update({
       where: { id: documentId },
       data: stripUndefined(data),
-      include: { uploadedBy: { select: { id: true, name: true, email: true, image: true } } },
+      include: {
+        uploadedBy: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
     });
   }
 
@@ -296,7 +346,11 @@ export class ProjectService {
         activityDate: data.activityDate ?? new Date(),
         createdById,
       },
-      include: { createdBy: { select: { id: true, name: true, email: true, image: true } } },
+      include: {
+        createdBy: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
     });
   }
 
@@ -308,7 +362,11 @@ export class ProjectService {
 
     return this.prisma.projectActivity.findMany({
       where: { projectId },
-      include: { createdBy: { select: { id: true, name: true, email: true, image: true } } },
+      include: {
+        createdBy: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
       orderBy: { activityDate: 'desc' },
     });
   }
@@ -316,7 +374,11 @@ export class ProjectService {
   async findOneActivity(projectId: string, activityId: string) {
     const activity = await this.prisma.projectActivity.findFirst({
       where: { id: activityId, projectId },
-      include: { createdBy: { select: { id: true, name: true, email: true, image: true } } },
+      include: {
+        createdBy: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
     });
     if (!activity) throw new NotFoundException('Activity not found');
     return activity;
@@ -335,7 +397,11 @@ export class ProjectService {
     return this.prisma.projectActivity.update({
       where: { id: activityId },
       data: stripUndefined(data),
-      include: { createdBy: { select: { id: true, name: true, email: true, image: true } } },
+      include: {
+        createdBy: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+      },
     });
   }
 

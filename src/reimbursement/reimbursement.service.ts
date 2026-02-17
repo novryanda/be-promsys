@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateReimbursementDto } from './dto/reimbursement.dto';
@@ -18,6 +19,7 @@ const reimbursementInclude = {
 
 @Injectable()
 export class ReimbursementService {
+  private readonly logger = new Logger(ReimbursementService.name);
   constructor(private prisma: PrismaService) {}
 
   async create(data: CreateReimbursementDto, submittedById: string) {
@@ -27,15 +29,36 @@ export class ReimbursementService {
     });
   }
 
-  async findAll(userId: string, userRole: string) {
+  async findAll(
+    userId: string,
+    userRole: string,
+    params: { page: number; size: number },
+  ) {
+    const { page, size } = params;
+    const skip = (page - 1) * size;
+
     const where =
       userRole === Role.EMPLOYEES ? { submittedById: userId } : undefined;
 
-    return this.prisma.reimbursement.findMany({
-      where,
-      include: reimbursementInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+    const [reimbursements, total] = await Promise.all([
+      this.prisma.reimbursement.findMany({
+        where,
+        include: reimbursementInclude,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: size,
+      }),
+      this.prisma.reimbursement.count({ where }),
+    ]);
+
+    return {
+      data: reimbursements,
+      paging: {
+        current_page: page,
+        size: size,
+        total_page: Math.ceil(total / size),
+      },
+    };
   }
 
   async findOne(id: string, userId: string, userRole: string) {
@@ -45,13 +68,8 @@ export class ReimbursementService {
     });
     if (!reimbursement) throw new NotFoundException('Reimbursement not found');
 
-    if (
-      userRole === Role.EMPLOYEES &&
-      reimbursement.submittedById !== userId
-    ) {
-      throw new ForbiddenException(
-        'You can only view your own reimbursements',
-      );
+    if (userRole === Role.EMPLOYEES && reimbursement.submittedById !== userId) {
+      throw new ForbiddenException('You can only view your own reimbursements');
     }
 
     return reimbursement;
@@ -63,7 +81,9 @@ export class ReimbursementService {
     });
     if (!reimbursement) throw new NotFoundException('Reimbursement not found');
     if (reimbursement.status !== 'PENDING') {
-      throw new BadRequestException('Only pending reimbursements can be approved');
+      throw new BadRequestException(
+        'Only pending reimbursements can be approved',
+      );
     }
 
     return this.prisma.reimbursement.update({
@@ -83,7 +103,9 @@ export class ReimbursementService {
     });
     if (!reimbursement) throw new NotFoundException('Reimbursement not found');
     if (reimbursement.status !== 'PENDING') {
-      throw new BadRequestException('Only pending reimbursements can be rejected');
+      throw new BadRequestException(
+        'Only pending reimbursements can be rejected',
+      );
     }
 
     return this.prisma.reimbursement.update({
@@ -103,7 +125,9 @@ export class ReimbursementService {
     });
     if (!reimbursement) throw new NotFoundException('Reimbursement not found');
     if (reimbursement.status !== 'APPROVED') {
-      throw new BadRequestException('Only approved reimbursements can be marked paid');
+      throw new BadRequestException(
+        'Only approved reimbursements can be marked paid',
+      );
     }
 
     return this.prisma.reimbursement.update({

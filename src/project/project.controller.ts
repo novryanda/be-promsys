@@ -58,7 +58,10 @@ export class ProjectController {
 
   @Post()
   @Roles(Role.ADMIN, Role.PROJECTMANAGER)
-  create(@Body(new ZodValidationPipe(CreateProjectSchema)) body: CreateProjectDto, @CurrentUser('id') userId: string) {
+  create(
+    @Body(new ZodValidationPipe(CreateProjectSchema)) body: CreateProjectDto,
+    @CurrentUser('id') userId: string,
+  ) {
     return this.projectService.create(body, userId);
   }
 
@@ -66,8 +69,13 @@ export class ProjectController {
   findAll(
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
+    @Query('page') page: number = 1,
+    @Query('size') size: number = 10,
   ) {
-    return this.projectService.findAll(userId, role);
+    return this.projectService.findAll(userId, role, {
+      page: Number(page),
+      size: Number(size),
+    });
   }
 
   @Get('users')
@@ -113,10 +121,7 @@ export class ProjectController {
 
   @Delete(':id/members/:userId')
   @Roles(Role.ADMIN, Role.PROJECTMANAGER)
-  removeMember(
-    @Param('id') id: string,
-    @Param('userId') userId: string,
-  ) {
+  removeMember(@Param('id') id: string, @Param('userId') userId: string) {
     return this.projectService.removeMember(id, userId);
   }
 
@@ -143,7 +148,13 @@ export class ProjectController {
     @CurrentUser('id') userId: string,
   ) {
     const parsed = CreateProjectDocumentSchema.parse(body);
-    return this.projectService.createDocumentWithR2(id, parsed, file, userId, this.r2Service);
+    return this.projectService.createDocumentWithR2(
+      id,
+      parsed,
+      file,
+      userId,
+      this.r2Service,
+    );
   }
 
   @Get(':id/documents')
@@ -152,10 +163,7 @@ export class ProjectController {
   }
 
   @Get(':id/documents/:docId')
-  findOneDocument(
-    @Param('id') id: string,
-    @Param('docId') docId: string,
-  ) {
+  findOneDocument(@Param('id') id: string, @Param('docId') docId: string) {
     return this.projectService.findOneDocument(id, docId);
   }
 
@@ -164,17 +172,15 @@ export class ProjectController {
   updateDocument(
     @Param('id') id: string,
     @Param('docId') docId: string,
-    @Body(new ZodValidationPipe(UpdateProjectDocumentSchema)) body: UpdateProjectDocumentDto,
+    @Body(new ZodValidationPipe(UpdateProjectDocumentSchema))
+    body: UpdateProjectDocumentDto,
   ) {
     return this.projectService.updateDocument(id, docId, body);
   }
 
   @Delete(':id/documents/:docId')
   @Roles(Role.ADMIN, Role.PROJECTMANAGER)
-  removeDocument(
-    @Param('id') id: string,
-    @Param('docId') docId: string,
-  ) {
+  removeDocument(@Param('id') id: string, @Param('docId') docId: string) {
     return this.projectService.removeDocument(id, docId);
   }
 
@@ -183,7 +189,8 @@ export class ProjectController {
   @Post(':id/activities')
   createActivity(
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(CreateProjectActivitySchema)) body: CreateProjectActivityDto,
+    @Body(new ZodValidationPipe(CreateProjectActivitySchema))
+    body: CreateProjectActivityDto,
     @CurrentUser('id') userId: string,
   ) {
     return this.projectService.createActivity(id, body, userId);
@@ -207,7 +214,8 @@ export class ProjectController {
   updateActivity(
     @Param('id') id: string,
     @Param('activityId') activityId: string,
-    @Body(new ZodValidationPipe(UpdateProjectActivitySchema)) body: UpdateProjectActivityDto,
+    @Body(new ZodValidationPipe(UpdateProjectActivitySchema))
+    body: UpdateProjectActivityDto,
   ) {
     return this.projectService.updateActivity(id, activityId, body);
   }

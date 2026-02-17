@@ -2,12 +2,14 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateTeamDto, UpdateTeamDto } from './dto/team.dto';
 
 @Injectable()
 export class TeamService {
+  private readonly logger = new Logger(TeamService.name);
   constructor(private prisma: PrismaService) {}
 
   async create(data: CreateTeamDto) {
@@ -17,14 +19,31 @@ export class TeamService {
     });
   }
 
-  async findAll() {
-    return this.prisma.team.findMany({
-      include: {
-        members: { include: { user: true } },
-        _count: { select: { members: true } },
+  async findAll(params: { page: number; size: number }) {
+    const { page, size } = params;
+    const skip = (page - 1) * size;
+
+    const [teams, total] = await Promise.all([
+      this.prisma.team.findMany({
+        include: {
+          members: { include: { user: true } },
+          _count: { select: { members: true } },
+        },
+        orderBy: { name: 'asc' },
+        skip,
+        take: size,
+      }),
+      this.prisma.team.count(),
+    ]);
+
+    return {
+      data: teams,
+      paging: {
+        current_page: page,
+        size: size,
+        total_page: Math.ceil(total / size),
       },
-      orderBy: { name: 'asc' },
-    });
+    };
   }
 
   async findOne(id: string) {

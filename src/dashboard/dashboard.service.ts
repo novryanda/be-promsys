@@ -51,7 +51,8 @@ export class DashboardService {
       activeProjects,
       totalTasks,
       completedTasks,
-      taskCompletionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+      taskCompletionRate:
+        totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
       totalInvoices,
       unpaidInvoices,
       totalReimbursements,
@@ -61,23 +62,19 @@ export class DashboardService {
   }
 
   private async getFinanceSummary() {
-    const [
-      totalIncome,
-      totalExpense,
-      unpaidInvoices,
-      pendingReimbursements,
-    ] = await Promise.all([
-      this.prisma.invoice.aggregate({
-        where: { type: 'INCOME', status: 'PAID' },
-        _sum: { totalAmount: true },
-      }),
-      this.prisma.invoice.aggregate({
-        where: { type: 'EXPENSE', status: 'PAID' },
-        _sum: { totalAmount: true },
-      }),
-      this.prisma.invoice.count({ where: { status: 'UNPAID' } }),
-      this.prisma.reimbursement.count({ where: { status: 'PENDING' } }),
-    ]);
+    const [totalIncome, totalExpense, unpaidInvoices, pendingReimbursements] =
+      await Promise.all([
+        this.prisma.invoice.aggregate({
+          where: { type: 'INCOME', status: 'PAID' },
+          _sum: { totalAmount: true },
+        }),
+        this.prisma.invoice.aggregate({
+          where: { type: 'EXPENSE', status: 'PAID' },
+          _sum: { totalAmount: true },
+        }),
+        this.prisma.invoice.count({ where: { status: 'UNPAID' } }),
+        this.prisma.reimbursement.count({ where: { status: 'PENDING' } }),
+      ]);
 
     const revenue = totalIncome._sum.totalAmount || new Decimal(0);
     const expense = totalExpense._sum.totalAmount || new Decimal(0);
@@ -111,7 +108,8 @@ export class DashboardService {
       activeProjects,
       totalTasks,
       completedTasks,
-      taskCompletionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+      taskCompletionRate:
+        totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
     };
   }
 
@@ -138,7 +136,8 @@ export class DashboardService {
       completedTasks,
       pendingTasks,
       submittedTasks,
-      taskCompletionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+      taskCompletionRate:
+        totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
     };
   }
 
@@ -157,12 +156,20 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.invoice.groupBy({
         by: ['createdAt'],
-        where: { type: 'INCOME', status: 'PAID', createdAt: { gte: sixMonthsAgo } },
+        where: {
+          type: 'INCOME',
+          status: 'PAID',
+          createdAt: { gte: sixMonthsAgo },
+        },
         _sum: { totalAmount: true },
       }),
       this.prisma.invoice.groupBy({
         by: ['createdAt'],
-        where: { type: 'EXPENSE', status: 'PAID', createdAt: { gte: sixMonthsAgo } },
+        where: {
+          type: 'EXPENSE',
+          status: 'PAID',
+          createdAt: { gte: sixMonthsAgo },
+        },
         _sum: { totalAmount: true },
       }),
       this.prisma.invoice.findMany({
@@ -192,11 +199,16 @@ export class DashboardService {
     ]);
 
     // Transform monthly data: group by YYYY-MM
-    const toMonthly = (rows: { createdAt: Date; _sum: { totalAmount: any } }[]) => {
+    const toMonthly = (
+      rows: { createdAt: Date; _sum: { totalAmount: any } }[],
+    ) => {
       const map = new Map<string, number>();
       for (const row of rows) {
         const month = `${row.createdAt.getFullYear()}-${String(row.createdAt.getMonth() + 1).padStart(2, '0')}`;
-        map.set(month, (map.get(month) ?? 0) + Number(row._sum.totalAmount ?? 0));
+        map.set(
+          month,
+          (map.get(month) ?? 0) + Number(row._sum.totalAmount ?? 0),
+        );
       }
       return Array.from(map.entries())
         .map(([month, amount]) => ({ month, amount }))
@@ -231,38 +243,39 @@ export class DashboardService {
   }
 
   async getProjectDashboard() {
-    const [projectsByStatus, recentProjects, tasksByStatus, upcomingDeadlines] = await Promise.all([
-      this.prisma.project.groupBy({
-        by: ['status'],
-        _count: true,
-      }),
-      this.prisma.project.findMany({
-        include: {
-          _count: { select: { tasks: true, members: true } },
-          createdBy: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-      }),
-      this.prisma.task.groupBy({
-        by: ['status'],
-        _count: true,
-      }),
-      this.prisma.task.findMany({
-        where: {
-          deadline: { gte: new Date() },
-          status: { not: 'DONE' },
-        },
-        select: {
-          id: true,
-          title: true,
-          deadline: true,
-          project: { select: { name: true } },
-        },
-        orderBy: { deadline: 'asc' },
-        take: 10,
-      }),
-    ]);
+    const [projectsByStatus, recentProjects, tasksByStatus, upcomingDeadlines] =
+      await Promise.all([
+        this.prisma.project.groupBy({
+          by: ['status'],
+          _count: true,
+        }),
+        this.prisma.project.findMany({
+          include: {
+            _count: { select: { tasks: true, members: true } },
+            createdBy: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        }),
+        this.prisma.task.groupBy({
+          by: ['status'],
+          _count: true,
+        }),
+        this.prisma.task.findMany({
+          where: {
+            deadline: { gte: new Date() },
+            status: { not: 'DONE' },
+          },
+          select: {
+            id: true,
+            title: true,
+            deadline: true,
+            project: { select: { name: true } },
+          },
+          orderBy: { deadline: 'asc' },
+          take: 10,
+        }),
+      ]);
 
     return {
       projectsByStatus: projectsByStatus.map((p) => ({

@@ -4,7 +4,10 @@ export const CreateTaskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   description: z.string().max(5000).optional().nullable(),
   assignedToId: z.string().min(1, 'Assigned user is required'),
-  deadline: z.string().or(z.date()).transform((v) => new Date(v)),
+  deadline: z
+    .string()
+    .or(z.date())
+    .transform((v) => new Date(v)),
   priority: z
     .enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
     .optional()

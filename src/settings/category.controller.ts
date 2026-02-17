@@ -12,14 +12,8 @@ import {
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '../auth/roles.enum';
 import { CategoryService } from './category.service';
-import {
-  CreateCategorySchema,
-  UpdateCategorySchema,
-} from './dto/category.dto';
-import type {
-  CreateCategoryDto,
-  UpdateCategoryDto,
-} from './dto/category.dto';
+import { CreateCategorySchema, UpdateCategorySchema } from './dto/category.dto';
+import type { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 
 @Controller('api/categories')

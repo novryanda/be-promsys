@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateInvoiceDto, UpdateInvoiceDto } from './dto/invoice.dto';
 import { Prisma } from '@prisma/client';
@@ -17,6 +17,7 @@ const invoiceInclude = {
 
 @Injectable()
 export class InvoiceService {
+  private readonly logger = new Logger(InvoiceService.name);
   constructor(private prisma: PrismaService) {}
 
   private async generateInvoiceNumber(): Promise<string> {
@@ -39,44 +40,51 @@ export class InvoiceService {
   }
 
   async create(data: CreateInvoiceDto, createdById: string) {
-    const invoiceNumber = await this.generateInvoiceNumber();
+    return this.prisma.$transaction(async (tx) => {
+      const invoiceNumber = await this.generateInvoiceNumber();
 
-    let taxAmount = new Decimal(0);
-    let totalAmount = new Decimal(data.amount);
+      let taxAmount = new Decimal(0);
+      let totalAmount = new Decimal(data.amount);
 
-    if (data.taxId) {
-      const tax = await this.prisma.tax.findUnique({
-        where: { id: data.taxId },
-      });
-      if (tax) {
-        taxAmount = new Decimal(data.amount)
-          .mul(tax.percentage)
-          .div(100);
-        totalAmount = new Decimal(data.amount).add(taxAmount);
+      if (data.taxId) {
+        const tax = await tx.tax.findUnique({
+          where: { id: data.taxId },
+        });
+        if (tax) {
+          taxAmount = new Decimal(data.amount).mul(tax.percentage).div(100);
+          totalAmount = new Decimal(data.amount).add(taxAmount);
+        }
       }
-    }
 
-    return this.prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        type: data.type,
-        projectId: data.projectId,
-        vendorId: data.vendorId,
-        categoryId: data.categoryId,
-        taxId: data.taxId,
-        amount: data.amount,
-        taxAmount,
-        totalAmount,
-        status: data.status,
-        dueDate: data.dueDate,
-        notes: data.notes,
-        createdById,
-      },
-      include: invoiceInclude,
+      return tx.invoice.create({
+        data: {
+          invoiceNumber,
+          type: data.type,
+          projectId: data.projectId,
+          vendorId: data.vendorId,
+          categoryId: data.categoryId,
+          taxId: data.taxId,
+          amount: data.amount,
+          taxAmount,
+          totalAmount,
+          status: data.status,
+          dueDate: data.dueDate,
+          notes: data.notes,
+          createdById,
+        },
+        include: invoiceInclude,
+      });
     });
   }
 
-  async findAll(userId: string, userRole: string) {
+  async findAll(
+    userId: string,
+    userRole: string,
+    params: { page: number; size: number },
+  ) {
+    const { page, size } = params;
+    const skip = (page - 1) * size;
+
     // PM can only see invoices related to their projects
     let where: any = undefined;
     if (userRole === Role.PROJECTMANAGER) {
@@ -85,11 +93,25 @@ export class InvoiceService {
       };
     }
 
-    return this.prisma.invoice.findMany({
-      where,
-      include: invoiceInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+    const [invoices, total] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where,
+        include: invoiceInclude,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: size,
+      }),
+      this.prisma.invoice.count({ where }),
+    ]);
+
+    return {
+      data: invoices,
+      paging: {
+        current_page: page,
+        size: size,
+        total_page: Math.ceil(total / size),
+      },
+    };
   }
 
   async findOne(id: string) {
@@ -106,7 +128,8 @@ export class InvoiceService {
 
     let taxAmount = invoice.taxAmount;
     let totalAmount = invoice.totalAmount;
-    const amount = data.amount !== undefined ? data.amount : Number(invoice.amount);
+    const amount =
+      data.amount !== undefined ? data.amount : Number(invoice.amount);
 
     const taxId = data.taxId !== undefined ? data.taxId : invoice.taxId;
     if (taxId) {

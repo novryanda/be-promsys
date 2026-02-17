@@ -25,7 +25,9 @@ export class EmailService {
 
   async sendEmail(to: string, subject: string, html: string) {
     if (!this.resend) {
-      this.logger.warn(`Email to ${to} skipped — Resend API key not configured`);
+      this.logger.warn(
+        `Email to ${to} skipped — Resend API key not configured`,
+      );
       return false;
     }
     try {

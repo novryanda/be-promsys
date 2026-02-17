@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseInterceptors,
   UploadedFile,
   ParseFilePipe,
@@ -49,21 +50,30 @@ export class TaskController {
     return this.taskService.create(projectId, body, userId);
   }
 
-  @Get('projects/:projectId/tasks')
   findByProject(
     @Param('projectId') projectId: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
+    @Query('page') page: number = 1,
+    @Query('size') size: number = 10,
   ) {
-    return this.taskService.findByProject(projectId, userId, role);
+    return this.taskService.findByProject(projectId, userId, role, {
+      page: Number(page),
+      size: Number(size),
+    });
   }
 
   @Get('tasks')
   findAll(
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
+    @Query('page') page: number = 1,
+    @Query('size') size: number = 10,
   ) {
-    return this.taskService.findAll(userId, role);
+    return this.taskService.findAll(userId, role, {
+      page: Number(page),
+      size: Number(size),
+    });
   }
 
   @Get('tasks/:id')

@@ -6,19 +6,14 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UsePipes,
 } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '../auth/roles.enum';
 import { VendorService } from './vendor.service';
-import {
-  CreateVendorSchema,
-  UpdateVendorSchema,
-} from './dto/vendor.dto';
-import type {
-  CreateVendorDto,
-  UpdateVendorDto,
-} from './dto/vendor.dto';
+import { CreateVendorSchema, UpdateVendorSchema } from './dto/vendor.dto';
+import type { CreateVendorDto, UpdateVendorDto } from './dto/vendor.dto';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 
 @Controller('api/vendors')
@@ -34,8 +29,11 @@ export class VendorController {
 
   @Get()
   @Roles(Role.ADMIN, Role.FINANCE)
-  findAll() {
-    return this.vendorService.findAll();
+  findAll(@Query('page') page: number = 1, @Query('size') size: number = 10) {
+    return this.vendorService.findAll({
+      page: Number(page),
+      size: Number(size),
+    });
   }
 
   @Get(':id')

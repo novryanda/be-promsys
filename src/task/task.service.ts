@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
@@ -12,11 +13,15 @@ const taskInclude = {
   assignedTo: true,
   createdBy: true,
   attachments: true,
-  comments: { include: { user: true }, orderBy: { createdAt: 'desc' as const } },
+  comments: {
+    include: { user: true },
+    orderBy: { createdAt: 'desc' as const },
+  },
 };
 
 @Injectable()
 export class TaskService {
+  private readonly logger = new Logger(TaskService.name);
   constructor(private prisma: PrismaService) {}
 
   async create(projectId: string, data: CreateTaskDto, createdById: string) {
@@ -31,27 +36,71 @@ export class TaskService {
     });
   }
 
-  async findByProject(projectId: string, userId: string, userRole: string) {
+  async findByProject(
+    projectId: string,
+    userId: string,
+    userRole: string,
+    params: { page: number; size: number },
+  ) {
+    const { page, size } = params;
+    const skip = (page - 1) * size;
+
     const where: any = { projectId };
     if (userRole === Role.EMPLOYEES) {
       where.assignedToId = userId;
     }
-    return this.prisma.task.findMany({
-      where,
-      include: taskInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+
+    const [tasks, total] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        include: taskInclude,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: size,
+      }),
+      this.prisma.task.count({ where }),
+    ]);
+
+    return {
+      data: tasks,
+      paging: {
+        current_page: page,
+        size: size,
+        total_page: Math.ceil(total / size),
+      },
+    };
   }
 
-  async findAll(userId: string, userRole: string) {
+  async findAll(
+    userId: string,
+    userRole: string,
+    params: { page: number; size: number },
+  ) {
+    const { page, size } = params;
+    const skip = (page - 1) * size;
+
     const where =
       userRole === Role.EMPLOYEES ? { assignedToId: userId } : undefined;
 
-    return this.prisma.task.findMany({
-      where,
-      include: taskInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+    const [tasks, total] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        include: taskInclude,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: size,
+      }),
+      this.prisma.task.count({ where }),
+    ]);
+
+    return {
+      data: tasks,
+      paging: {
+        current_page: page,
+        size: size,
+        total_page: Math.ceil(total / size),
+      },
+    };
   }
 
   async findOne(id: string) {

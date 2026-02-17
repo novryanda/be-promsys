@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UsePipes,
 } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
@@ -35,8 +36,8 @@ export class TeamController {
   }
 
   @Get()
-  findAll() {
-    return this.teamService.findAll();
+  findAll(@Query('page') page: number = 1, @Query('size') size: number = 10) {
+    return this.teamService.findAll({ page: Number(page), size: Number(size) });
   }
 
   @Get(':id')
@@ -70,10 +71,7 @@ export class TeamController {
 
   @Delete(':id/members/:userId')
   @Roles(Role.ADMIN, Role.PROJECTMANAGER)
-  removeMember(
-    @Param('id') id: string,
-    @Param('userId') userId: string,
-  ) {
+  removeMember(@Param('id') id: string, @Param('userId') userId: string) {
     return this.teamService.removeMember(id, userId);
   }
 }

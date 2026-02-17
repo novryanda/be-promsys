@@ -11,10 +11,7 @@ export class FileService {
     private r2: R2Service,
   ) {}
 
-  async upload(
-    file: Express.Multer.File,
-    uploadedById: string,
-  ) {
+  async upload(file: Express.Multer.File, uploadedById: string) {
     const ext = file.originalname.split('.').pop();
     const key = `uploads/${Date.now()}-${randomUUID()}.${ext}`;
 

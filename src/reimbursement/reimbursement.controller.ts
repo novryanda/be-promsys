@@ -5,6 +5,7 @@ import {
   Patch,
   Param,
   Body,
+  Query,
   UsePipes,
   UseInterceptors,
   UploadedFile,
@@ -48,8 +49,13 @@ export class ReimbursementController {
   findAll(
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
+    @Query('page') page: number = 1,
+    @Query('size') size: number = 10,
   ) {
-    return this.reimbursementService.findAll(userId, role);
+    return this.reimbursementService.findAll(userId, role, {
+      page: Number(page),
+      size: Number(size),
+    });
   }
 
   @Get(':id')
@@ -63,10 +69,7 @@ export class ReimbursementController {
 
   @Patch(':id/approve')
   @Roles(Role.ADMIN, Role.FINANCE)
-  approve(
-    @Param('id') id: string,
-    @CurrentUser('id') userId: string,
-  ) {
+  approve(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.reimbursementService.approve(id, userId);
   }
 

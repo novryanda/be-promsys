@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { EmailService } from './email.service';
 
 @Injectable()
 export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
@@ -66,12 +67,28 @@ export class NotificationService {
     return Promise.all(notifications.map((n) => this.create(n)));
   }
 
-  async findAllByUser(userId: string) {
-    return this.prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
+  async findAllByUser(userId: string, params: { page: number; size: number }) {
+    const { page, size } = params;
+    const skip = (page - 1) * size;
+
+    const [notifications, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: size,
+      }),
+      this.prisma.notification.count({ where: { userId } }),
+    ]);
+
+    return {
+      data: notifications,
+      paging: {
+        current_page: page,
+        size: size,
+        total_page: Math.ceil(total / size),
+      },
+    };
   }
 
   async markAsRead(id: string, userId: string) {

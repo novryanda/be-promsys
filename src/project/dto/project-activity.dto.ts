@@ -20,5 +20,9 @@ export const UpdateProjectActivitySchema = z.object({
     .optional(),
 });
 
-export type CreateProjectActivityDto = z.infer<typeof CreateProjectActivitySchema>;
-export type UpdateProjectActivityDto = z.infer<typeof UpdateProjectActivitySchema>;
+export type CreateProjectActivityDto = z.infer<
+  typeof CreateProjectActivitySchema
+>;
+export type UpdateProjectActivityDto = z.infer<
+  typeof UpdateProjectActivitySchema
+>;
