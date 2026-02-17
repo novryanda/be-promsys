@@ -7,7 +7,7 @@ const Decimal = Prisma.Decimal;
 
 @Injectable()
 export class DashboardService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getSummary(userId: string, userRole: string) {
     if (userRole === Role.EMPLOYEES) {
@@ -193,7 +193,7 @@ export class DashboardService {
       }),
       this.prisma.reimbursement.groupBy({
         by: ['status'],
-        _count: true,
+        _count: { _all: true },
         _sum: { amount: true },
       }),
     ]);
@@ -236,7 +236,7 @@ export class DashboardService {
       })),
       reimbursementsByStatus: reimbursementsByStatus.map((r) => ({
         status: r.status,
-        count: r._count,
+        count: (r._count as any)._all,
         total: Number(r._sum.amount ?? 0),
       })),
     };
@@ -247,7 +247,7 @@ export class DashboardService {
       await Promise.all([
         this.prisma.project.groupBy({
           by: ['status'],
-          _count: true,
+          _count: { _all: true },
         }),
         this.prisma.project.findMany({
           include: {
@@ -259,7 +259,7 @@ export class DashboardService {
         }),
         this.prisma.task.groupBy({
           by: ['status'],
-          _count: true,
+          _count: { _all: true },
         }),
         this.prisma.task.findMany({
           where: {
@@ -280,12 +280,12 @@ export class DashboardService {
     return {
       projectsByStatus: projectsByStatus.map((p) => ({
         status: p.status,
-        count: p._count,
+        count: (p._count as any)._all,
       })),
       recentProjects,
       tasksByStatus: tasksByStatus.map((t) => ({
         status: t.status,
-        count: t._count,
+        count: (t._count as any)._all,
       })),
       upcomingDeadlines: upcomingDeadlines.map((t) => ({
         id: t.id,

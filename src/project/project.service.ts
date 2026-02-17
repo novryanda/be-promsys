@@ -26,7 +26,7 @@ function stripUndefined<T extends Record<string, any>>(obj: T): T {
 @Injectable()
 export class ProjectService {
   private readonly logger = new Logger(ProjectService.name);
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async create(data: CreateProjectDto, createdById: string) {
     try {
@@ -34,15 +34,32 @@ export class ProjectService {
         `[ProjectService.create] data: ${JSON.stringify(data)}`,
       );
       this.logger.debug(`[ProjectService.create] createdById: ${createdById}`);
-      const result = await this.prisma.project.create({
-        data: { ...stripUndefined(data), createdById },
-        include: {
-          createdBy: true,
-          members: { include: { user: true } },
-          _count: { select: { tasks: true, invoices: true } },
-        },
+
+      const result = await this.prisma.$transaction(async (tx) => {
+        const project = await tx.project.create({
+          data: { ...stripUndefined(data), createdById },
+        });
+
+        // Automatically add creator as owner/member
+        await tx.projectMember.create({
+          data: {
+            projectId: project.id,
+            userId: createdById,
+            role: 'owner',
+          },
+        });
+
+        return tx.project.findUnique({
+          where: { id: project.id },
+          include: {
+            createdBy: true,
+            members: { include: { user: true } },
+            _count: { select: { tasks: true, invoices: true } },
+          },
+        });
       });
-      this.logger.log(`[ProjectService.create] success: ${result.id}`);
+
+      this.logger.log(`[ProjectService.create] success: ${result?.id}`);
       return result;
     } catch (error) {
       this.logger.error(
@@ -61,10 +78,14 @@ export class ProjectService {
     const { page, size } = params;
     const skip = (page - 1) * size;
 
+    this.logger.debug(`[ProjectService.findAll] userId: ${userId}, role: ${userRole}, params: ${JSON.stringify(params)}`);
+
     const where =
       userRole === Role.EMPLOYEES
         ? { members: { some: { userId } } }
         : undefined;
+
+    this.logger.debug(`[ProjectService.findAll] where: ${JSON.stringify(where)}`);
 
     const [projects, total] = await Promise.all([
       this.prisma.project.findMany({
@@ -80,6 +101,8 @@ export class ProjectService {
       }),
       this.prisma.project.count({ where }),
     ]);
+
+    this.logger.debug(`[ProjectService.findAll] found projects: ${projects.length}, total count: ${total}`);
 
     return {
       data: projects,
@@ -178,11 +201,11 @@ export class ProjectService {
   async getUsers(search?: string) {
     const where = search
       ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { email: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
+        OR: [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { email: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }
       : undefined;
 
     return this.prisma.user.findMany({

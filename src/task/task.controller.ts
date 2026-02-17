@@ -38,7 +38,7 @@ export class TaskController {
   constructor(
     private readonly taskService: TaskService,
     private readonly fileService: FileService,
-  ) {}
+  ) { }
 
   @Post('projects/:projectId/tasks')
   @Roles(Role.ADMIN, Role.PROJECTMANAGER)
@@ -50,6 +50,7 @@ export class TaskController {
     return this.taskService.create(projectId, body, userId);
   }
 
+  @Get('projects/:projectId/tasks')
   findByProject(
     @Param('projectId') projectId: string,
     @CurrentUser('id') userId: string,

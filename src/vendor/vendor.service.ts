@@ -5,13 +5,16 @@ import { CreateVendorDto, UpdateVendorDto } from './dto/vendor.dto';
 @Injectable()
 export class VendorService {
   private readonly logger = new Logger(VendorService.name);
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
-  async create(data: CreateVendorDto) {
-    return this.prisma.vendor.create({
-      data,
-      include: { category: true },
-    });
+  private mapVendor(vendor: any) {
+    return {
+      ...vendor,
+      googleMapsUrl:
+        vendor.latitude && vendor.longitude
+          ? `https://www.google.com/maps/search/?api=1&query=${vendor.latitude},${vendor.longitude}`
+          : null,
+    };
   }
 
   async findAll(params: { page: number; size: number }) {
@@ -29,7 +32,7 @@ export class VendorService {
     ]);
 
     return {
-      data: vendors,
+      data: vendors.map((v) => this.mapVendor(v)),
       paging: {
         current_page: page,
         size: size,
@@ -44,16 +47,25 @@ export class VendorService {
       include: { category: true },
     });
     if (!vendor) throw new NotFoundException('Vendor not found');
-    return vendor;
+    return this.mapVendor(vendor);
+  }
+
+  async create(data: CreateVendorDto) {
+    const vendor = await this.prisma.vendor.create({
+      data,
+      include: { category: true },
+    });
+    return this.mapVendor(vendor);
   }
 
   async update(id: string, data: UpdateVendorDto) {
     await this.findOne(id);
-    return this.prisma.vendor.update({
+    const vendor = await this.prisma.vendor.update({
       where: { id },
       data,
       include: { category: true },
     });
+    return this.mapVendor(vendor);
   }
 
   async remove(id: string) {

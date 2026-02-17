@@ -7,6 +7,8 @@ export const CreateVendorSchema = z.object({
   phone: z.string().max(50).optional().nullable(),
   email: z.string().email().optional().nullable(),
   categoryId: z.string().min(1, 'Category is required'),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
 });
 
 export const UpdateVendorSchema = CreateVendorSchema.partial();
