@@ -26,10 +26,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Copy .env for Prisma generate
-COPY .env .env
 
 # Generate Prisma client
+ARG DATABASE_URL
+ENV DATABASE_URL=$DATABASE_URL
 RUN npx prisma generate
 
 # Build NestJS
