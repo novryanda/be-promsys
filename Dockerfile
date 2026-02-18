@@ -7,13 +7,13 @@ COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
 
 RUN \
   if [ -f pnpm-lock.yaml ]; then \
-    corepack enable pnpm && pnpm install --frozen-lockfile; \
+  corepack enable pnpm && pnpm install --frozen-lockfile; \
   elif [ -f yarn.lock ]; then \
-    yarn install --frozen-lockfile; \
+  yarn install --frozen-lockfile; \
   elif [ -f package-lock.json ]; then \
-    npm ci; \
+  npm ci; \
   else \
-    npm install; \
+  npm install; \
   fi
 
 # ---- Stage 2: Build ----
@@ -53,10 +53,13 @@ COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
-# Default: all DB operations disabled
-ENV DB_PUSH=false
-ENV DB_MIGRATE=false
-ENV DB_SEED=false
+# Default: Control flags with default values
+ENV SKIP_PRISMA_GENERATE=false
+ENV SKIP_DB_MIGRATION=false
+ENV SKIP_DB_SEED=false
+# Database reset mode: "reset" (migrate reset + seed), "migrate" (default), "skip"
+ENV DB_RESET_MODE=migrate
+
 
 EXPOSE 3001
 

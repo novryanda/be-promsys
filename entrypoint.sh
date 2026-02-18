@@ -1,41 +1,91 @@
 #!/bin/sh
 set -e
 
+echo "============================================"
+echo "🚀 Booting BE-Fintech Container"
+echo "============================================"
+echo "📝 Environment: NODE_ENV=${NODE_ENV:-production}"
+echo "📝 DB Reset Mode: ${DB_RESET_MODE:-migrate}"
+echo "📝 Skip Prisma Generate: ${SKIP_PRISMA_GENERATE:-false}"
+echo "📝 Skip DB Migration: ${SKIP_DB_MIGRATION:-false}"
+echo "📝 Skip DB Seed: ${SKIP_DB_SEED:-false}"
+echo ""
 
-echo "=== Starting BE-Fintech ==="
-echo "DATABASE_URL=$DATABASE_URL"
-export DATABASE_URL
+if [ -z "$DATABASE_URL" ]; then
+  echo "❌ ERROR: DATABASE_URL is not set."
+  exit 1
+fi
 
+echo "✅ DATABASE_URL is configured"
+echo ""
 
-# 1. DB_RESET (Destructive, runs first)
-if [ "$DB_RESET" = "true" ]; then
-  echo ">> [DANGER] Running prisma migrate reset --force..."
-  # --skip-seed because we want to control seeding via DB_SEED
+if [ "$DB_RESET_MODE" = "reset" ]; then
+  echo "============================================"
+  echo "💥 DATABASE RESET MODE (DESTRUCTIVE)"
+  echo "============================================"
+  echo "⚠️  WARNING: This will DROP all data and reset the database!"
+  echo "🔄 Running prisma migrate reset --force..."
+  echo ""
   npx prisma migrate reset --force
-  echo ">> Reset completed."
+  echo "✅ Database reset, migrations applied, and seeded successfully!"
+  echo ""
+else
+  if [ "$SKIP_PRISMA_GENERATE" != "true" ]; then
+    echo "============================================"
+    echo "🛠️ Stage 1: Generating Prisma Client..."
+    echo "============================================"
+    npx prisma generate
+    echo "✅ Prisma Client generated successfully!"
+    echo ""
+  else
+    echo "⏭️  Skipping Prisma Client generation (SKIP_PRISMA_GENERATE=true)"
+    echo ""
+  fi
+
+  if [ "$SKIP_DB_MIGRATION" != "true" ]; then
+    echo "============================================"
+    echo "📦 Stage 2: Syncing Database Schema..."
+    echo "============================================"
+    # Check if migrations exist
+    if [ -d "./prisma/migrations" ] && [ "$(ls -A ./prisma/migrations 2>/dev/null | grep -v migration_lock.toml)" ]; then
+      echo "📂 Migrations found. Running prisma migrate deploy..."
+      npx prisma migrate deploy
+      echo "✅ Migrations applied successfully!"
+    else
+      echo "📂 No migrations found. Running prisma db push..."
+      npx prisma db push --accept-data-loss
+      echo "✅ Database schema pushed successfully!"
+    fi
+    echo ""
+  else
+    echo "⏭️  Skipping database migration (SKIP_DB_MIGRATION=true)"
+    echo ""
+  fi
+
+  if [ "$SKIP_DB_SEED" != "true" ]; then
+    echo "============================================"
+    echo "🌱 Stage 3: Seeding Database..."
+    echo "============================================"
+    if npm run | grep -q "db:seed"; then
+      echo "🌱 Running seed via npm run db:seed..."
+      (npm run db:seed || echo "⚠️  Seed failed (this is OK if data already exists)")
+    else
+      echo "ℹ️  No seed script configured in package.json. Skipping seeding."
+    fi
+    echo ""
+  else
+    echo "⏭️  Skipping database seeding (SKIP_DB_SEED=true)"
+    echo ""
+  fi
 fi
 
-# 2. DB_PUSH (Schema sync without migration history)
-if [ "$DB_PUSH" = "true" ]; then
-  echo ">> Running prisma db push..."
-  npx prisma db push --accept-data-loss
-  echo ">> DB Push completed."
+echo "============================================"
+echo "🚀 Stage 4: Starting Application..."
+echo "============================================"
+if npm run | grep -q "start:docker"; then
+  echo "🎯 Starting with: npm run start:docker"
+  exec npm run start:docker
+else
+  echo "🎯 Starting with default: node dist/main"
+  exec node dist/main
 fi
-
-# 3. DB_MIGRATE (Production migration)
-if [ "$DB_MIGRATE" = "true" ]; then
-  echo ">> Running prisma migrate deploy..."
-  npx prisma migrate deploy
-  echo ">> Migration completed."
-fi
-
-# 4. DB_SEED (Seeding)
-if [ "$DB_SEED" = "true" ]; then
-  echo ">> Running seed..."
-  # Executing the compiled seed script
-  node dist/scripts/seed-admin.js
-  echo ">> Seed completed."
-fi
-
-echo "=== Starting application ==="
-exec node dist/main
