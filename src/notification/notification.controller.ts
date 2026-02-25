@@ -1,10 +1,10 @@
-import { Controller, Get, Patch, Param, Query } from '@nestjs/common';
+import { Controller, Get, Patch, Delete, Param, Query } from '@nestjs/common';
 import { CurrentUser } from '../auth/auth.decorator';
 import { NotificationService } from './notification.service';
 
 @Controller('api/notifications')
 export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(private readonly notificationService: NotificationService) { }
 
   @Get()
   findAll(
@@ -31,5 +31,10 @@ export class NotificationController {
   @Get('unread-count')
   getUnreadCount(@CurrentUser('id') userId: string) {
     return this.notificationService.getUnreadCount(userId);
+  }
+
+  @Delete('read')
+  deleteRead(@CurrentUser('id') userId: string) {
+    return this.notificationService.deleteRead(userId);
   }
 }

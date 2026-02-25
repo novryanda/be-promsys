@@ -14,14 +14,14 @@ export interface CalendarEvent {
 
 @Injectable()
 export class CalendarService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getEvents(userId: string, userRole: string): Promise<CalendarEvent[]> {
     const events: CalendarEvent[] = [];
 
     // Project timelines
     const projectWhere =
-      userRole === Role.EMPLOYEES
+      userRole !== Role.ADMIN
         ? { members: { some: { userId } } }
         : undefined;
 
@@ -51,7 +51,9 @@ export class CalendarService {
 
     // Task deadlines
     const taskWhere =
-      userRole === Role.EMPLOYEES ? { assignedToId: userId } : undefined;
+      userRole !== Role.ADMIN
+        ? { project: { members: { some: { userId } } } }
+        : undefined;
 
     const tasks = await this.prisma.task.findMany({
       where: taskWhere,

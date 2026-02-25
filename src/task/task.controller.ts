@@ -133,7 +133,7 @@ export class TaskController {
   }
 
   @Post('tasks/:id/comments')
-  @Roles(Role.ADMIN, Role.PROJECTMANAGER)
+  @Roles(Role.ADMIN, Role.PROJECTMANAGER, Role.EMPLOYEES)
   addComment(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(CreateTaskCommentSchema))

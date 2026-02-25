@@ -8,7 +8,7 @@ export class NotificationService {
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
-  ) {}
+  ) { }
 
   async create(data: {
     userId: string;
@@ -116,5 +116,12 @@ export class NotificationService {
       where: { userId, isRead: false },
     });
     return { count };
+  }
+
+  async deleteRead(userId: string) {
+    const result = await this.prisma.notification.deleteMany({
+      where: { userId, isRead: true },
+    });
+    return { deleted: result.count };
   }
 }

@@ -54,6 +54,11 @@ enum ReimbursementStatus {
   PAID
 }
 
+enum ReimbursementAttachmentType {
+  SUBMISSION
+  PAYMENT
+}
+
 enum DocumentType {
   PROPOSAL
   TUTORIAL
@@ -72,6 +77,7 @@ enum NotificationType {
   REIMBURSEMENT_SUBMITTED
   REIMBURSEMENT_APPROVED
   REIMBURSEMENT_REJECTED
+  REIMBURSEMENT_PAID
   PROJECT_ASSIGNED
 }
 
@@ -401,12 +407,13 @@ model reimbursement {
 }
 
 model reimbursementAttachment {
-  id              String   @id @default(cuid())
+  id              String                      @id @default(cuid())
   reimbursementId String
   fileName        String
   fileUrl         String
   fileSize        Int
-  createdAt       DateTime @default(now())
+  type            ReimbursementAttachmentType @default(SUBMISSION)
+  createdAt       DateTime                    @default(now())
 
   reimbursement reimbursement @relation(fields: [reimbursementId], references: [id], onDelete: Cascade)
 }

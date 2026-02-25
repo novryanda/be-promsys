@@ -16,6 +16,7 @@ import {
   UpdateProjectActivityDto,
 } from './dto/project-activity.dto';
 import { Role } from '../auth/roles.enum';
+import { NotificationService } from '../notification/notification.service';
 
 function stripUndefined<T extends Record<string, any>>(obj: T): T {
   return Object.fromEntries(
@@ -26,7 +27,10 @@ function stripUndefined<T extends Record<string, any>>(obj: T): T {
 @Injectable()
 export class ProjectService {
   private readonly logger = new Logger(ProjectService.name);
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private notificationService: NotificationService,
+  ) { }
 
   async create(data: CreateProjectDto, createdById: string) {
     try {
@@ -81,7 +85,7 @@ export class ProjectService {
     this.logger.debug(`[ProjectService.findAll] userId: ${userId}, role: ${userRole}, params: ${JSON.stringify(params)}`);
 
     const where =
-      userRole === Role.EMPLOYEES
+      userRole !== Role.ADMIN
         ? { members: { some: { userId } } }
         : undefined;
 
@@ -126,13 +130,53 @@ export class ProjectService {
     if (!project) throw new NotFoundException('Project not found');
 
     if (
-      userRole === Role.EMPLOYEES &&
+      userRole !== Role.ADMIN &&
       !project.members.some((m) => m.userId === userId)
     ) {
-      throw new ForbiddenException('You are not assigned to this project');
+      throw new ForbiddenException('You are not a member of this project');
     }
 
-    return project;
+    const [invoices, reimbursements] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where: { projectId: id },
+        select: { type: true, status: true, totalAmount: true },
+      }),
+      this.prisma.reimbursement.findMany({
+        where: { projectId: id, status: 'PAID' },
+        select: { amount: true },
+      }),
+    ]);
+
+    const totalIncome = invoices
+      .filter((i) => i.type === 'INCOME' && i.status === 'PAID')
+      .reduce((acc, curr) => acc + Number(curr.totalAmount), 0);
+
+    const outstandingIncome = invoices
+      .filter((i) => i.type === 'INCOME' && (i.status === 'UNPAID' || i.status === 'DEBT'))
+      .reduce((acc, curr) => acc + Number(curr.totalAmount), 0);
+
+    const invoiceExpense = invoices
+      .filter((i) => i.type === 'EXPENSE' && i.status === 'PAID')
+      .reduce((acc, curr) => acc + Number(curr.totalAmount), 0);
+
+    const reimbursementExpense = reimbursements.reduce(
+      (acc, curr) => acc + Number(curr.amount),
+      0,
+    );
+
+    const totalExpense = invoiceExpense + reimbursementExpense;
+
+    return {
+      ...project,
+      financialSummary: {
+        totalIncome,
+        outstandingIncome,
+        totalExpense,
+        invoiceExpense,
+        reimbursementExpense,
+        netProfit: totalIncome - totalExpense,
+      },
+    };
   }
 
   async update(id: string, data: UpdateProjectDto) {
@@ -156,7 +200,7 @@ export class ProjectService {
   }
 
   async addMember(projectId: string, userId: string, role: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const member = await this.prisma.$transaction(async (tx) => {
       const project = await tx.project.findUnique({
         where: { id: projectId },
       });
@@ -170,9 +214,21 @@ export class ProjectService {
 
       return tx.projectMember.create({
         data: { projectId, userId, role },
-        include: { user: true },
+        include: { user: true, project: true },
       });
     });
+
+    // Send notification to the added member
+    this.notificationService.create({
+      userId,
+      type: 'PROJECT_ASSIGNED',
+      title: 'Added to Project',
+      message: `You have been added to project "${member.project.name}" as ${role}`,
+      referenceId: projectId,
+      referenceType: 'PROJECT',
+    }).catch((err) => this.logger.error(`Failed to send project member notification: ${err.message}`));
+
+    return member;
   }
 
   async removeMember(projectId: string, userId: string) {

@@ -37,12 +37,14 @@ export class InvoiceController {
   constructor(
     private readonly invoiceService: InvoiceService,
     private readonly fileService: FileService,
-  ) {}
+  ) { }
 
   @Post()
   @Roles(Role.ADMIN, Role.FINANCE)
-  @UsePipes(new ZodValidationPipe(CreateInvoiceSchema))
-  create(@Body() body: CreateInvoiceDto, @CurrentUser('id') userId: string) {
+  create(
+    @Body(new ZodValidationPipe(CreateInvoiceSchema)) body: CreateInvoiceDto,
+    @CurrentUser('id') userId: string,
+  ) {
     return this.invoiceService.create(body, userId);
   }
 
@@ -53,10 +55,28 @@ export class InvoiceController {
     @CurrentUser('role') role: string,
     @Query('page') page: number = 1,
     @Query('size') size: number = 10,
+    @Query('projectId') projectId?: string,
+    @Query('type') type?: string,
   ) {
     return this.invoiceService.findAll(userId, role, {
       page: Number(page),
       size: Number(size),
+      projectId,
+      type,
+    });
+  }
+
+  @Get('finance-summary')
+  @Roles(Role.ADMIN, Role.FINANCE)
+  getFinanceSummary(
+    @Query('page') page: number = 1,
+    @Query('size') size: number = 10,
+    @Query('search') search: string,
+  ) {
+    return this.invoiceService.findAllFinance({
+      page: Number(page),
+      size: Number(size),
+      search,
     });
   }
 

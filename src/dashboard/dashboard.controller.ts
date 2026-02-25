@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '../auth/roles.enum';
 import { CurrentUser } from '../auth/auth.decorator';
@@ -6,7 +6,7 @@ import { DashboardService } from './dashboard.service';
 
 @Controller('api/dashboard')
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(private readonly dashboardService: DashboardService) { }
 
   @Get('summary')
   getSummary(
@@ -18,8 +18,8 @@ export class DashboardController {
 
   @Get('finance')
   @Roles(Role.ADMIN, Role.FINANCE)
-  getFinanceDashboard() {
-    return this.dashboardService.getFinanceDashboard();
+  getFinanceDashboard(@Query('timeRange') timeRange?: string) {
+    return this.dashboardService.getFinanceDashboard(timeRange);
   }
 
   @Get('projects')

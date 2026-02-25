@@ -34,12 +34,12 @@ export class ReimbursementController {
   constructor(
     private readonly reimbursementService: ReimbursementService,
     private readonly fileService: FileService,
-  ) {}
+  ) { }
 
   @Post()
-  @UsePipes(new ZodValidationPipe(CreateReimbursementSchema))
   create(
-    @Body() body: CreateReimbursementDto,
+    @Body(new ZodValidationPipe(CreateReimbursementSchema))
+    body: CreateReimbursementDto,
     @CurrentUser('id') userId: string,
   ) {
     return this.reimbursementService.create(body, userId);
@@ -51,10 +51,14 @@ export class ReimbursementController {
     @CurrentUser('role') role: string,
     @Query('page') page: number = 1,
     @Query('size') size: number = 10,
+    @Query('projectId') projectId?: string,
+    @Query('view') view?: 'me' | 'all',
   ) {
     return this.reimbursementService.findAll(userId, role, {
       page: Number(page),
       size: Number(size),
+      projectId,
+      view,
     });
   }
 
@@ -101,12 +105,14 @@ export class ReimbursementController {
     )
     file: Express.Multer.File,
     @CurrentUser('id') userId: string,
+    @Query('type') type?: 'SUBMISSION' | 'PAYMENT',
   ) {
     const uploaded = await this.fileService.upload(file, userId);
     return this.reimbursementService.addAttachment(id, {
       fileName: uploaded.originalName,
       fileUrl: uploaded.url,
       fileSize: uploaded.size,
+      type,
     });
   }
 }

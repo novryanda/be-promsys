@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../common/prisma.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
 import { Role } from '../auth/roles.enum';
+import { NotificationService } from '../notification/notification.service';
 
 const taskInclude = {
   project: true,
@@ -22,7 +23,10 @@ const taskInclude = {
 @Injectable()
 export class TaskService {
   private readonly logger = new Logger(TaskService.name);
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationService: NotificationService,
+  ) { }
 
   async create(projectId: string, data: CreateTaskDto, createdById: string) {
     const project = await this.prisma.project.findUnique({
@@ -30,10 +34,24 @@ export class TaskService {
     });
     if (!project) throw new NotFoundException('Project not found');
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: { ...data, projectId, createdById },
       include: taskInclude,
     });
+
+    // Notify assignee about new task
+    if (data.assignedToId && data.assignedToId !== createdById) {
+      this.notificationService.create({
+        userId: data.assignedToId,
+        type: 'TASK_ASSIGNED',
+        title: 'New Task Assigned',
+        message: `You have been assigned a new task: "${data.title}" in project "${project.name}"`,
+        referenceId: task.id,
+        referenceType: 'TASK',
+      }).catch((err) => this.logger.error(`Failed to send task assigned notification: ${err.message}`));
+    }
+
+    return task;
   }
 
   async findByProject(
@@ -46,8 +64,8 @@ export class TaskService {
     const skip = (page - 1) * size;
 
     const where: any = { projectId };
-    if (userRole === Role.EMPLOYEES) {
-      where.assignedToId = userId;
+    if (userRole !== Role.ADMIN) {
+      where.project = { members: { some: { userId } } };
     }
 
     const [tasks, total] = await Promise.all([
@@ -80,7 +98,9 @@ export class TaskService {
     const skip = (page - 1) * size;
 
     const where =
-      userRole === Role.EMPLOYEES ? { assignedToId: userId } : undefined;
+      userRole !== Role.ADMIN
+        ? { project: { members: { some: { userId } } } }
+        : undefined;
 
     const [tasks, total] = await Promise.all([
       this.prisma.task.findMany({
@@ -149,11 +169,43 @@ export class TaskService {
       throw new ForbiddenException('You can only update your own tasks');
     }
 
-    return this.prisma.task.update({
+    const updated = await this.prisma.task.update({
       where: { id },
       data: { status: status as any },
       include: taskInclude,
     });
+
+    // Send status-based notifications
+    const projectName = task.project?.name || 'Unknown Project';
+    const notif = { referenceId: id, referenceType: 'TASK' };
+
+    if (status === 'SUBMITTED' && task.createdById !== userId) {
+      this.notificationService.create({
+        ...notif,
+        userId: task.createdById,
+        type: 'TASK_SUBMITTED',
+        title: 'Task Submitted',
+        message: `Task "${task.title}" has been submitted for review in project "${projectName}"`,
+      }).catch((err) => this.logger.error(`Failed to send task submitted notification: ${err.message}`));
+    } else if (status === 'DONE' && task.assignedToId !== userId) {
+      this.notificationService.create({
+        ...notif,
+        userId: task.assignedToId,
+        type: 'TASK_APPROVED',
+        title: 'Task Approved',
+        message: `Your task "${task.title}" has been approved in project "${projectName}"`,
+      }).catch((err) => this.logger.error(`Failed to send task approved notification: ${err.message}`));
+    } else if (status === 'REVISION' && task.assignedToId !== userId) {
+      this.notificationService.create({
+        ...notif,
+        userId: task.assignedToId,
+        type: 'TASK_REVISION',
+        title: 'Task Needs Revision',
+        message: `Your task "${task.title}" needs revision in project "${projectName}"`,
+      }).catch((err) => this.logger.error(`Failed to send task revision notification: ${err.message}`));
+    }
+
+    return updated;
   }
 
   async addAttachment(

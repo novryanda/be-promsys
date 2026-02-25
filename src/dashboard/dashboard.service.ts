@@ -141,9 +141,20 @@ export class DashboardService {
     };
   }
 
-  async getFinanceDashboard() {
+  async getFinanceDashboard(timeRange?: string) {
     const now = new Date();
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    let startDate: Date;
+    let endDate: Date = now;
+
+    if (timeRange === 'ytd') {
+      startDate = new Date(now.getFullYear(), 0, 1); // Jan 1st
+    } else if (timeRange === 'thisyear') {
+      startDate = new Date(now.getFullYear(), 0, 1);
+      endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+    } else {
+      // Default: last 6 months
+      startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    }
 
     const [
       incomeByMonth,
@@ -153,13 +164,15 @@ export class DashboardService {
       paidInvoicesCount,
       recentInvoicesList,
       reimbursementsByStatus,
+      invoiceExpensesByCategory,
+      reimbursementExpensesByCategory,
     ] = await Promise.all([
       this.prisma.invoice.groupBy({
         by: ['createdAt'],
         where: {
           type: 'INCOME',
           status: 'PAID',
-          createdAt: { gte: sixMonthsAgo },
+          createdAt: { gte: startDate, lte: endDate },
         },
         _sum: { totalAmount: true },
       }),
@@ -168,7 +181,7 @@ export class DashboardService {
         where: {
           type: 'EXPENSE',
           status: 'PAID',
-          createdAt: { gte: sixMonthsAgo },
+          createdAt: { gte: startDate, lte: endDate },
         },
         _sum: { totalAmount: true },
       }),
@@ -196,18 +209,31 @@ export class DashboardService {
         _count: { _all: true },
         _sum: { amount: true },
       }),
+      this.prisma.invoice.groupBy({
+        by: ['categoryId'],
+        where: { type: 'EXPENSE', status: 'PAID' },
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.reimbursement.groupBy({
+        by: ['categoryId'],
+        where: { status: 'PAID' },
+        _sum: { amount: true },
+      }),
     ]);
+
 
     // Transform monthly data: group by YYYY-MM
     const toMonthly = (
-      rows: { createdAt: Date; _sum: { totalAmount: any } }[],
+      rows: any[],
     ) => {
       const map = new Map<string, number>();
       for (const row of rows) {
+        if (!row.createdAt || !(row.createdAt instanceof Date)) continue;
         const month = `${row.createdAt.getFullYear()}-${String(row.createdAt.getMonth() + 1).padStart(2, '0')}`;
+        const sumVal = row._sum?.totalAmount || row._sum?.amount || 0;
         map.set(
           month,
-          (map.get(month) ?? 0) + Number(row._sum.totalAmount ?? 0),
+          (map.get(month) ?? 0) + Number(sumVal),
         );
       }
       return Array.from(map.entries())
@@ -219,6 +245,36 @@ export class DashboardService {
       (sum, inv) => sum + Number(inv.totalAmount ?? 0),
       0,
     );
+
+    // Merge expenses by category
+    const categoryMap = new Map<string, number>();
+
+    for (const row of invoiceExpensesByCategory) {
+      if (row.categoryId && typeof row.categoryId === 'string') {
+        categoryMap.set(row.categoryId, (categoryMap.get(row.categoryId) ?? 0) + Number(row._sum.totalAmount ?? 0));
+      }
+    }
+    for (const row of reimbursementExpensesByCategory) {
+      if (row.categoryId && typeof row.categoryId === 'string') {
+        categoryMap.set(row.categoryId, (categoryMap.get(row.categoryId) ?? 0) + Number(row._sum.amount ?? 0));
+      }
+    }
+
+    const categoryIds = Array.from(categoryMap.keys()).filter(id => !!id);
+
+    let expensesByCategory: any[] = [];
+    if (categoryIds.length > 0) {
+      const categories = await this.prisma.category.findMany({
+        where: { id: { in: categoryIds } },
+        select: { id: true, name: true },
+      });
+
+      expensesByCategory = categories.map(cat => ({
+        name: cat.name,
+        amount: categoryMap.get(cat.id) || 0,
+      })).sort((a, b) => b.amount - a.amount);
+    }
+
 
     return {
       monthlyIncome: toMonthly(incomeByMonth as any),
@@ -239,6 +295,7 @@ export class DashboardService {
         count: (r._count as any)._all,
         total: Number(r._sum.amount ?? 0),
       })),
+      expensesByCategory,
     };
   }
 

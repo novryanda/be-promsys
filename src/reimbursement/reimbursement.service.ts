@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../common/prisma.service';
 import { CreateReimbursementDto } from './dto/reimbursement.dto';
 import { Role } from '../auth/roles.enum';
+import { NotificationService } from '../notification/notification.service';
 
 const reimbursementInclude = {
   category: true,
@@ -20,36 +21,79 @@ const reimbursementInclude = {
 @Injectable()
 export class ReimbursementService {
   private readonly logger = new Logger(ReimbursementService.name);
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationService: NotificationService,
+  ) { }
 
   async create(data: CreateReimbursementDto, submittedById: string) {
-    return this.prisma.reimbursement.create({
+    this.logger.log(`Creating reimbursement for user ${submittedById}: ${JSON.stringify(data)}`);
+    const reimbursement = await this.prisma.reimbursement.create({
       data: { ...data, submittedById },
       include: reimbursementInclude,
     });
+
+    // Notify all ADMIN and FINANCE users about new reimbursement
+    const submitter = reimbursement.submittedBy;
+    this.prisma.user.findMany({
+      where: { role: { in: [Role.ADMIN, Role.FINANCE] }, id: { not: submittedById } },
+      select: { id: true },
+    }).then((users) => {
+      const notifications = users.map((u) => ({
+        userId: u.id,
+        type: 'REIMBURSEMENT_SUBMITTED',
+        title: 'New Reimbursement Request',
+        message: `${submitter?.name || 'A user'} submitted a reimbursement: "${reimbursement.title}"`,
+        referenceId: reimbursement.id,
+        referenceType: 'REIMBURSEMENT',
+      }));
+      return this.notificationService.createMany(notifications);
+    }).catch((err) => this.logger.error(`Failed to send reimbursement submitted notifications: ${err.message}`));
+
+    return reimbursement;
   }
 
   async findAll(
     userId: string,
     userRole: string,
-    params: { page: number; size: number },
+    params: { page: number; size: number; projectId?: string; view?: 'me' | 'all' },
   ) {
-    const { page, size } = params;
+    const { page, size, projectId, view } = params;
     const skip = (page - 1) * size;
 
-    const where =
-      userRole === Role.EMPLOYEES ? { submittedById: userId } : undefined;
+    const where: any = {};
+
+    // Default visibility logic
+    if (userRole === Role.EMPLOYEES || userRole === Role.PROJECTMANAGER) {
+      where.submittedById = userId;
+    } else if (userRole === Role.ADMIN || userRole === Role.FINANCE) {
+      // Admin/Finance can choose to see only their own or all
+      if (view === 'me') {
+        where.submittedById = userId;
+      }
+      // If view === 'all' or not specified, show all (no submittedById filter)
+    }
+
+    if (projectId) {
+      where.projectId = projectId;
+    }
+
+    this.logger.log(`Finding reimbursements. User: ${userId}, Role: ${userRole}, View: ${view}, Where: ${JSON.stringify(where)}`);
 
     const [reimbursements, total] = await Promise.all([
       this.prisma.reimbursement.findMany({
-        where,
+        where: Object.keys(where).length > 0 ? where : undefined,
         include: reimbursementInclude,
         orderBy: { createdAt: 'desc' },
         skip,
         take: size,
       }),
-      this.prisma.reimbursement.count({ where }),
+      this.prisma.reimbursement.count({
+        where: Object.keys(where).length > 0 ? where : undefined,
+      }),
     ]);
+
+    this.logger.log(`Found ${total} reimbursements`);
 
     return {
       data: reimbursements,
@@ -86,7 +130,7 @@ export class ReimbursementService {
       );
     }
 
-    return this.prisma.reimbursement.update({
+    const updated = await this.prisma.reimbursement.update({
       where: { id },
       data: {
         status: 'APPROVED',
@@ -95,6 +139,18 @@ export class ReimbursementService {
       },
       include: reimbursementInclude,
     });
+
+    // Notify submitter
+    this.notificationService.create({
+      userId: reimbursement.submittedById,
+      type: 'REIMBURSEMENT_APPROVED',
+      title: 'Reimbursement Approved',
+      message: `Your reimbursement "${reimbursement.title}" has been approved`,
+      referenceId: id,
+      referenceType: 'REIMBURSEMENT',
+    }).catch((err) => this.logger.error(`Failed to send reimbursement approved notification: ${err.message}`));
+
+    return updated;
   }
 
   async reject(id: string, approvedById: string, rejectionReason: string) {
@@ -108,7 +164,7 @@ export class ReimbursementService {
       );
     }
 
-    return this.prisma.reimbursement.update({
+    const updated = await this.prisma.reimbursement.update({
       where: { id },
       data: {
         status: 'REJECTED',
@@ -117,6 +173,18 @@ export class ReimbursementService {
       },
       include: reimbursementInclude,
     });
+
+    // Notify submitter
+    this.notificationService.create({
+      userId: reimbursement.submittedById,
+      type: 'REIMBURSEMENT_REJECTED',
+      title: 'Reimbursement Rejected',
+      message: `Your reimbursement "${reimbursement.title}" has been rejected. Reason: ${rejectionReason}`,
+      referenceId: id,
+      referenceType: 'REIMBURSEMENT',
+    }).catch((err) => this.logger.error(`Failed to send reimbursement rejected notification: ${err.message}`));
+
+    return updated;
   }
 
   async markPaid(id: string) {
@@ -130,7 +198,7 @@ export class ReimbursementService {
       );
     }
 
-    return this.prisma.reimbursement.update({
+    const updated = await this.prisma.reimbursement.update({
       where: { id },
       data: {
         status: 'PAID',
@@ -138,11 +206,23 @@ export class ReimbursementService {
       },
       include: reimbursementInclude,
     });
+
+    // Notify submitter
+    this.notificationService.create({
+      userId: reimbursement.submittedById,
+      type: 'REIMBURSEMENT_PAID',
+      title: 'Reimbursement Paid',
+      message: `Your reimbursement "${reimbursement.title}" has been paid`,
+      referenceId: id,
+      referenceType: 'REIMBURSEMENT',
+    }).catch((err) => this.logger.error(`Failed to send reimbursement paid notification: ${err.message}`));
+
+    return updated;
   }
 
   async addAttachment(
     reimbursementId: string,
-    data: { fileName: string; fileUrl: string; fileSize: number },
+    data: { fileName: string; fileUrl: string; fileSize: number; type?: 'SUBMISSION' | 'PAYMENT' },
   ) {
     const reimbursement = await this.prisma.reimbursement.findUnique({
       where: { id: reimbursementId },
@@ -150,7 +230,13 @@ export class ReimbursementService {
     if (!reimbursement) throw new NotFoundException('Reimbursement not found');
 
     return this.prisma.reimbursementAttachment.create({
-      data: { ...data, reimbursementId },
+      data: {
+        fileName: data.fileName,
+        fileUrl: data.fileUrl,
+        fileSize: data.fileSize,
+        type: data.type || 'SUBMISSION',
+        reimbursementId
+      },
     });
   }
 }
